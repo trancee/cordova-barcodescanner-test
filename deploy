@@ -1,0 +1,100 @@
+#!/bin/bash
+
+# Device can be iOS, Android, BlackBerry
+mode=$1
+device=$1
+
+if [ -z "$mode" ]; then
+	mode="rebuild"
+else
+	device=$2
+fi
+
+OS=`uname`
+SED=sed
+
+if [ -z "$device" ]; then
+	if [ "$OS" == "Darwin" ]; then
+		device="iOS"
+
+		SED=gsed
+	elif [ "$OS" == "Linux" ]; then
+		device="Android"
+
+		export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64/
+	fi
+fi
+
+echo "Building for $device"
+
+BUILDPATH="package"
+
+if [ "$mode" == "build" ] || [ "$mode" == "rebuild" ]; then
+	cp index.html index.html.orig
+
+	$SED -i -e "s/<head>/<head>\n\t<script src=\"cordova.js\"><\/script>\n/" index.html
+
+
+	# clean up the old directories
+	rm -r ${BUILDPATH}
+
+	# build the package for native deployment
+	sencha app build package
+
+	cp index.html.orig index.html
+	rm index.html.orig
+fi
+
+
+
+rm -rf build/cordova/www/*
+cp -R ${BUILDPATH}/* build/cordova/www/
+
+rm build/cordova/www/icon.png
+rm build/cordova/www/splash.png
+rm -rf build/cordova/www/resources/icons
+rm -rf build/cordova/www/resources/screens
+
+
+cd build/cordova
+
+if [ "$device" == "iOS" ]; then
+	rm -rf platforms/ios/www
+
+	cordova prepare ios
+
+	rm -rf platforms/ios/www/resources/icons
+	rm -rf platforms/ios/www/resources/screens
+
+	cordova compile ios
+elif [ "$device" == "Android" ]; then
+	rm -rf platforms/android/assets/www
+
+	cordova prepare android
+
+	$SED -i -e "s/android:screenOrientation=\"portrait\"/android:screenOrientation=\"userPortrait\"/" platforms/android/AndroidManifest.xml
+
+	rm -rf platforms/android/assets/www/resources/icons
+	rm -rf platforms/android/assets/www/resources/screens
+
+	cordova compile android --debug
+
+	cp platforms/android/ant-build/MyApp-debug.apk ../
+elif [ "$device" == "BlackBerry" ]; then
+	#rm -rf platforms/blackberry10/www/*
+
+	cordova prepare blackberry10
+
+	mkdir platforms/blackberry10/www/resources/icons
+	mkdir platforms/blackberry10/www/resources/screens
+
+	cp ../../resources/icons/blackberry*.png platforms/blackberry10/www/resources/icons/
+
+	cp ../../resources/screens/splash-720x720.png platforms/blackberry10/www/resources/screens/
+	cp ../../resources/screens/splash-720x1280.png platforms/blackberry10/www/resources/screens/
+	cp ../../resources/screens/splash-768x1280.png platforms/blackberry10/www/resources/screens/
+
+	cordova compile blackberry10 --release --keystorepass up2you
+
+	cp platforms/blackberry10/build/device/bb10app.bar ../MyApp-debug.bar
+fi
